@@ -1,0 +1,101 @@
+---
+title: "regression_broom"
+output: html_notebook
+---
+
+This is a demo of how to fit lm() regression by group and get the results back using broom.  
+
+Source: https://stackoverflow.com/questions/62972843/retreiving-tidy-results-from-regression-by-group-with-broom
+
+Load libs
+```{r}
+library(dplyr)
+library(broom)
+```
+
+```{r}
+sessionInfo()
+```
+Create data for modelling
+```{r}
+# a df with 504 observations of 4 columns
+df <- data.frame(
+  hour  = factor(rep(1:24, each = 21)),
+  price = runif(504, min = -10, max = 125), #uniform distribution
+  wind  = runif(504, min = 0, max = 2500),
+  temp  = runif(504, min = -10, max = 25)
+)
+
+glimpse(df)
+```
+Check the data by group hours.
+```{r}
+df %>%
+  group_by(hour) %>%
+  summarise(min_price = min(price),
+            avg_price = mean(price),
+            max_price = max(price),
+            .groups = "drop") # this drops the info message from dplyr "ungrouping output.."
+```
+We see that the min, avg, max values of price varies across the 24 groups.
+
+Run lm() calls by grouping variable hour.
+```{r}
+library(purrr) #needed for map
+
+# Run lm() per hour as price regressed on wind + temp
+res <- df %>%
+  group_by(hour) %>%
+  do(fitHour = lm(price ~ wind + temp, data = .)) # using dplyr::do
+
+# This creates a data frame object with 24 rows of 
+# 1. hour: factor col which is our grouping attribute rowwise with id 1-24
+# 2. fitHour: list with one model per group id 1-24 
+
+# We can ungroup ... 
+
+res_1 <- df %>%
+  group_by(hour) %>%
+  do(fitHour = lm(price ~ wind + temp, data = .)) %>%
+  ungroup %>%
+  mutate(HourCoef = map(fitHour, tidy)) # we loop over the col 2 list with map and tidy it to a new list column
+
+# This creates a similar dataframe as res one with additional column
+# 3. HourCoef: list with tidy model parameters: term, estiate, std.error, stat, pvalue
+
+# ... or we can use unnest after the mutate
+
+res_2 <- df %>%
+  group_by(hour) %>%
+  do(fitHour = lm(price ~ wind + temp, data = .)) %>%
+  ungroup %>%
+  transmute(hour, HourCoef = map(fitHour, tidy)) # map to apply tidy on each model
+
+# This creates a similar dataframe as res_1 without the fitHour col, only 1 and 3.
+
+# ...then we do the unnest after the mutate (transmutate) 
+library(tidyr)
+
+res_2b <- df %>%
+  group_by(hour) %>%
+  do(fitHour = lm(price ~ wind + temp, data = .)) %>%
+  ungroup %>%
+  transmute(hour, HourCoef = map(fitHour, tidy)) %>% # map to apply tidy on each model
+  unnest(HourCoef) # Here we unnest the list with coefficients
+
+# This creates df that has one row for each of the three terms (intercept, wind, temp) and their coefficients for every group. 24 x 3 = 72 rows
+
+```
+
+If we want one single data set use pull the firHour and loop over the list with map and condense it to a single dataset by row binding (_dfr suffix)
+```{r}
+res_2c <- df %>%
+  group_by(hour) %>%
+  do(fitHour = lm(price ~ wind + temp, data = .)) %>%
+  ungroup %>%
+  pull(fitHour) %>% # pull all the models
+  map_dfr(tidy, .id = "hour") # returns dataframe created by row-binding
+```
+
+These results res_2b and res_2c are identical.
+
