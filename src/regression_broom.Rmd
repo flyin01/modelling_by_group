@@ -96,6 +96,25 @@ res_2c <- df %>%
   pull(fitHour) %>% # pull all the models
   map_dfr(tidy, .id = "hour") # returns dataframe created by row-binding
 ```
-
 These results res_2b and res_2c are identical.
 
+
+Get the r2 value and model summary statistics.
+These can be obtained from the model object using the glance() function.
+
+```{r}
+# get the r2 value
+
+res_3 <- df %>%
+  group_by(hour) %>%
+  do(fitHour = lm(price ~ wind + temp, data = .)) %>%
+  ungroup() %>%
+  mutate(HourCoef = map(fitHour, tidy)) %>%
+  transmute(hour, HourCoef, modelStats = map(fitHour, glance)) %>% # Use glance to get the
+  unnest(HourCoef, modelStats)
+
+head(res_3)
+```
+The res_3 contains the same information as res_2b and res_2c but additonal columns have been added which contain the model summary statistics metrics. These have the same value for all the three terms. Some of these could of course be filtered out.
+
+It is also possible to use agument() to get the fitted values for each point.
