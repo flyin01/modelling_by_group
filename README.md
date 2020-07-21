@@ -4,4 +4,4 @@ This repo will contain examples how to fit a model per group in a dataset. Thus 
 
 ## methods
 - [x] alt 1, using lm, dplyr and broom file: regression_broom.rmd  
-- [ ] alt 2, using tidymodels
+- [ ] alt 2, using tidymodels ongoing!

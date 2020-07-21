@@ -1,0 +1,132 @@
+---
+title: "regression_tidymodels"
+output: html_notebook
+---
+
+Another demo of how to do linear regression by group using tidymodels package.  
+
+Source: https://stackoverflow.com/questions/62687664/map-tidymodels-process-to-a-list-group-by-or-nest
+
+Load tidymodels packages
+```{r}
+#library(broom)
+#library(tidyr)
+#library(purrr)
+library(tidymodels)
+```
+Example data
+```{r}
+data("hpc_cv")
+glimpse(hpc_cv)
+```
+Create some data
+```{r}
+# a df with 504 observations of 4 columns
+df <- data.frame(
+  hour  = factor(rep(1:24, each = 21)),
+  price = runif(504, min = -10, max = 125), #uniform distribution
+  wind  = runif(504, min = 0, max = 2500),
+  temp  = runif(504, min = -10, max = 25)
+)
+
+glimpse(df)
+```
+
+Run lm() calls by grouping variable hour using tidymodels.
+
+We can do that by setting up a function to do all the tidymodel fitting and predicting, then use map() through a nested data.frame.
+
+First we define things that we prefer to keep outside the function and then create function.
+```{r}
+
+# create model mode and set engine using parsnip
+lm_mod <- 
+  linear_reg(mode = "regression") %>%
+  set_engine("lm")
+
+# create a workflow using workflows
+wf <- 
+  workflow() %>%
+  add_model(lm_mod) # adds a parsnip model to wf
+
+
+## define big function for model fitting and predicting
+predict_price <- function(df) {
+  
+  split     <- initial_split(df)
+  train_df  <- training(split)
+  test_df   <- testing(split)
+  
+  #create recipe
+  recipe_train <-
+    recipe(price ~ temp + wind, data = train_df) %>%
+    step_normalize(all_predictors())
+  
+  # fit workflow on train data
+  fit_wf <-
+    wf %>%
+    add_recipe(recipe_train) %>%
+    fit(data = train_df)
+  
+  # predict on test data - Do we need this now? We want the coefficients first!
+  #predict(fit_wf, test_df)
+  
+}
+
+```
+
+Now we nest our data
+
+```{r}
+df_n <- df %>%
+  group_by(hour) %>%
+  nest()
+```
+
+Then we map() over these nested dataframes with the created function predict_price.
+
+```{r}
+system.time(
+
+  res <- df_n %>%
+  mutate(predictions = map(data, possibly(predict_price, otherwise = NA)))
+
+)
+```
+The output res is a dataframe containing:  
+1. hour: factor variable with levels 1-24
+2. data: list of data frames 21 x 3 (rows x cols)
+3. models: list of lists per group 1-24
+
+Ungroup the results
+```{r}
+
+res_un <- res %>%
+  ungroup %>%
+  mutate(HourCoef = map(models, tidy)) %>%
+  transmute(hour, modelStats = map(models, glance))
+
+# How does broom work with workflow objects and tidymodels??
+
+# This is what we wnat for each group (hour)
+tidy(res[[3]][[1]]$fit$fit$fit)
+
+# ...work on this pipe flow! TBD
+res %>%
+  ungroup %>%
+  mutate(HourCoef = map(predictions, tidy))
+
+
+
+# reference below...
+res_un <- df %>%
+  group_by(hour) %>%
+  do(fitHour = lm(price ~ wind + temp, data = .)) %>%
+  ungroup() %>%
+  mutate(HourCoef = map(fitHour, tidy)) %>%
+  transmute(hour, HourCoef, modelStats = map(fitHour, glance)) %>% # Use glance to get the
+  unnest(HourCoef, modelStats)
+```
+
+
+
