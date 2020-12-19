@@ -87,7 +87,7 @@ res_2b <- df %>%
 
 ```
 
-If we want one single data set use pull the firHour and loop over the list with map and condense it to a single dataset by row binding (_dfr suffix)
+If we want one single data set use pull the fitHour and loop over the list with map and condense it to a single dataset by row binding (_dfr suffix)
 ```{r}
 res_2c <- df %>%
   group_by(hour) %>%
